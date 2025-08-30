@@ -2,26 +2,16 @@
 import Head from "next/head";
 import type { GetServerSideProps } from "next";
 
-// === Типи даних, якими оперуємо на сторінці
-type Service = {
-  name: string;
-  durationMin: number;
-  price: number;
-  currency?: string;
-};
-
-type Profile = {
-  slug: string;
-  displayName: string;
-  services: Service[];
-};
+type Service = { name: string; durationMin: number; price: number; currency?: string };
+type Profile = { slug: string; displayName: string; services: Service[] };
 
 type PageProps = {
   profile: Profile | null;
   slug: string;
+  source: "api" | "demo" | "none";
 };
 
-// === Тимчасові демо-дані (залишаться як fallback)
+// Тимчасові демо-дані (fallback)
 const DEMO: Record<string, Profile> = {
   test: {
     slug: "test",
@@ -41,74 +31,60 @@ const DEMO: Record<string, Profile> = {
   },
 };
 
-// === SSR: пробуємо взяти реальні дані з API, інакше — DEMO
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const slug = String(ctx.query.slug ?? "");
-
   let profile: Profile | null = null;
+  let source: PageProps["source"] = "none";
 
-  // 1) Якщо задано URL API у змінній середовища — пробуємо реальний бекенд
-  // Напр.: PUBLIC_API_URL = https://api.sfero.app/public
+  // 1) Пробуємо реальний API, якщо заданий
   const apiBase =
-    process.env.PUBLIC_API_URL ||
-    process.env.NEXT_PUBLIC_PUBLIC_API_URL ||
-    "";
+    process.env.PUBLIC_API_URL || process.env.NEXT_PUBLIC_PUBLIC_API_URL || "";
 
   if (apiBase && slug) {
     try {
-      const url = `${apiBase.replace(/\/$/, "")}/profiles/${encodeURIComponent(
-        slug
-      )}`;
-      const res = await fetch(url, {
-        headers: { accept: "application/json" },
-      });
+      const url = `${apiBase.replace(/\/$/, "")}/profiles/${encodeURIComponent(slug)}`;
+      const res = await fetch(url, { headers: { accept: "application/json" } });
 
       if (res.ok) {
         const data = await res.json();
-
-        // --- АДАПТЕР під твій відгук API ---
-        // Зведи поля відповіді до наших типів.
         profile = {
           slug: data.slug ?? slug,
           displayName: data.name ?? data.displayName ?? slug,
-          services: (Array.isArray(data.services) ? data.services : []).map(
-            (s: any) => ({
-              name: String(s.name ?? "Service"),
-              durationMin:
-                Number(s.durationMin ?? s.duration ?? s.duration_minutes) || 60,
-              price: Number(s.price ?? 0),
-              currency: s.currency ?? data.currency ?? "PLN",
-            })
-          ),
+          services: (Array.isArray(data.services) ? data.services : []).map((s: any) => ({
+            name: String(s.name ?? "Service"),
+            durationMin: Number(s.durationMin ?? s.duration ?? s.duration_minutes) || 60,
+            price: Number(s.price ?? 0),
+            currency: s.currency ?? data.currency ?? "PLN",
+          })),
         };
+        source = "api";
       }
-    } catch (_) {
-      // ігноруємо — підемо у DEMO
+    } catch {
+      // ігноруємо, підемо у DEMO
     }
   }
 
   // 2) Fallback на DEMO
-  if (!profile) profile = DEMO[slug] ?? null;
+  if (!profile) {
+    profile = DEMO[slug] ?? null;
+    source = profile ? "demo" : "none";
+  }
 
-  return { props: { profile, slug } };
+  return { props: { profile, slug, source } };
 };
 
-// === Проста сторінка з fallback'ом "не знайдено"
-export default function PublicProfile({ profile, slug }: PageProps) {
-  const title = profile
-    ? `${profile.displayName} — Sfero`
-    : `Profile not found — Sfero`;
+export default function PublicProfile({ profile, slug, source }: PageProps) {
+  const title = profile ? `${profile.displayName} — Sfero` : `Profile not found — Sfero`;
 
   return (
     <main style={{ maxWidth: 860, margin: "48px auto", fontFamily: "system-ui" }}>
       <Head>
         <title>{title}</title>
         <meta name="robots" content="index,follow" />
-        {/* опц.: однаковий favicon всюди */}
-        {/* <link rel="icon" href="https://sfero-public.vercel.app/favicon.ico" /> */}
       </Head>
 
       <h1>Public profile: {profile ? profile.slug : slug}</h1>
+      <p style={{ opacity: 0.6, marginTop: -8 }}>source: {source}</p>
 
       {!profile ? (
         <p>Профіль не знайдено або поки не опублікований.</p>
