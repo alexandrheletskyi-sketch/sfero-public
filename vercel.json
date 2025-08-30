@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/public/:slug",
+      "destination": "/PublicProfileSlug?slug=:slug"
+    }
+  ]
+}

@@ -1,1 +1,1 @@
-Sfero Public
+# Sfero Public + Cloudflare Worker template
